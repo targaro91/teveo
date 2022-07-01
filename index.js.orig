@@ -1,0 +1,320 @@
+
+var express = require('express');
+var app = express();
+var path    = require('path');
+const fs = require('fs');
+var httpServer = require('http').createServer(app);
+
+var io = require('socket.io')(httpServer);
+
+app.use(express.static('public'));
+
+app.enable('trust proxy');
+
+app.get('/',function(req,res){
+  console.log("IP remoto: "+req.ip);
+  //res.sendFile(path.join(__dirname+'/index.html'));
+  res.sendFile(path.join(__dirname+'/videoconf.html'));
+  //__dirname : It will resolve to your project folder.
+});
+
+io.on('connection', function(socket){
+  var address = socket.handshake.address;
+  console.log(address+' Conexion aceptada'+socket.connected);
+
+  
+  socket.on('new-message', function(msg) {
+	  try
+		{
+			procesarMensage(toObject(msg),socket);			
+		}catch(exception)
+		{
+			console.log("No se pudo procesar mensaje:");
+			console.log(exception);
+			console.log(msg);			
+		}
+	//io.sockets.emit('message', messages);
+});
+  
+  
+  socket.on('disconnect', function(){
+    // close user connection
+	if(!socket.sala)
+	{
+		console.log("Conexion cerrada "+socket.usuario);
+		hashPeers.delete(socket.usuario);
+	}else
+	{
+		if(socket.ownerRom)
+		{
+			console.log("Eliminada sala: "+socket.sala);
+			console.log("Conexion cerrada sala: "+socket.sala+" propietario:"+socket.usuario);
+			
+			hashSalas.delete(socket.sala);
+		}else
+		{
+			try
+			{
+				console.log("Conexion cerrada sala: "+socket.sala+" usuario:"+socket.usuario);
+                                var sal=hashSalas.get(socket.sala);
+                                var tmp=sal.hashPeers;
+                                tmp.delete(socket.usuario);
+
+                                //enviar hangUp a propietario
+
+                                var msg=new SignalMsg(socket.usuario,sal.propietario,"HangUp",null,socket.sala);
+                                reenviarMsg(msg);
+
+				
+			}catch(exp)
+			{
+				
+			}
+			
+		}
+	}
+  });
+});
+
+
+function toJSON(obj)
+{
+ return JSON.stringify(obj);
+}
+
+function toObject(txt)
+{
+ return JSON.parse(txt);
+}
+
+
+//Buscar manera de extaer el usuarion a partir de la conexion, para mayor seguridad
+
+var SignalMsg= function (srcUser,dstUser,tipo,dato,rom)
+{	this.srcUser=srcUser;
+	this.dstUser=dstUser;
+	//Invite,CreateRom,Offer,Answer,IceCandidate,HangUp,Error,Autenticate,AnswerInvite,Decline
+	this.tipo=tipo;
+	this.dato=dato;
+	this.sala=rom;
+};
+
+var Peer= function (user,wscon)
+{
+	this.usuario=user;
+	// Online,SendOffer,SendAnswer,Ocupado
+	this.estado="Online";
+	this.websocket=wscon;
+};
+
+var Sala=function(propietario)
+{
+	this.propietario=propietario;
+	this.hashPeers=new Map();
+	this.iceServers={ iceServers: [{urls:"turn:turn.alinet.cu:3478?transport=tcp",username: "alinet",
+	credential: "123"}]
+	};
+};
+var hashSalas=new Map();
+
+var hashPeers=new Map();
+
+function procesarMensage(msg,con)
+{
+	console.log("++++++++++++++++++ MENSAJE RECIVIDO ++++++++++++++++");
+	console.log(msg);
+	console.log("--------------- Fin --------------");
+	
+	//Implementar en cada caso verificar que ya exista una conexion entre los dos "Per"
+	//excepto en Invite
+	switch(msg.tipo){
+		case "Invite":
+				result=checkState(msg);
+				if(result=="Online")
+					reenviarMsg(msg);
+				else
+				{
+					msg.tipo="Error";
+					msg.dato=result;
+					console.log("++++++++++++++++++ MENSAJE ENVIADO ++++++++++++++++");
+					console.log(msg);
+					console.log("--------------- Fin --------------");
+					//hashPeers.get(msg.srcUser).websocket.emit('message',toJSON(msg));
+					con.emit('message',toJSON(msg));
+				}
+				break;
+		case "EnableBroadcast":
+		case "DisableBroadcast":
+		case "RestartIce":
+		case "AnswerInvite":
+		case "Offer":
+		case "Answer":
+		case "IceCandidate":
+			reenviarMsg(msg); break; 
+		case "HangUp":
+			if(!msg.sala)
+			{
+				hashPeers.get(msg.srcUser).estado="Online";
+				hashPeers.get(msg.dstUser).estado="Online";
+			}
+			reenviarMsg(msg);
+			break; 
+		case "Autenticate":
+			var res=registrar(msg,con);
+			msg.dato=res;
+			con.emit('message',toJSON(msg));
+			break;		
+		case "CreateRom":
+			var res=createRom(msg,con);
+			msg.dato=res;
+			console.log("++++++++++++++++++ MENSAJE ENVIADO a:"+msg.srcUser);
+			console.log(msg);
+			console.log("--------------- Fin --------------");
+			con.emit('message',toJSON(msg));
+			break;
+	}
+
+}
+function registrar(msg,con)
+{
+	login=msg.dato;
+	if(!msg.sala)
+	{
+		var result=hashPeers.get(login.user);
+		if(!result && login.user)
+			{
+				console.log("Usuario "+login.user+" registrado");
+				var newPeer= new Peer(login.user,con);
+				con.usuario=login.user;
+				hashPeers.set(login.user,newPeer);
+			}else
+			{
+				console.log("Usuario "+login.user+" ya inicio secion");
+				return "Usuario ya existe";
+			}
+				
+	}else
+	{
+		var sal=hashSalas.get(msg.sala);
+		if(!sal)
+			return {res: "No existe la sala"};
+			
+		var hpeers=sal.hashPeers;
+		var usercon=hpeers.get(login.user);
+		if(usercon)
+		{
+			console.log("Usuario "+login.user+" ya inicio secion");
+			return {res: "Usuario ya existe"};
+		}
+		con.usuario=login.user;
+		con.sala=msg.sala;
+		hpeers.set(login.user,con);
+		console.log("Usuario "+login.user+" registrado en sala: "+msg.sala);
+		//Poner el propietario de la sala
+		msg.dstUser=sal.propietario;
+		return {res: "OK", iceServers: sal.iceServers};
+			
+	}
+		
+}
+function createRom(msg,con)
+{
+	var res=hashSalas.get(msg.sala);
+	if(res)
+	{
+		res="La sala "+msg.sala+" ya existe"
+		return {res: res};
+	}
+	
+	
+	var sal=new Sala(msg.srcUser);
+	var peers=sal.hashPeers;
+	hashSalas.set(msg.sala,sal);
+	con.usuario=msg.srcUser;
+	con.sala=msg.sala;
+	con.ownerRom=true;
+	peers.set(msg.srcUser,con);
+	
+	console.log("Sala creada: "+msg.sala+" propietario:" +msg.srcUser);	
+	var dato={res: "OK",iceServers: sal.iceServers};
+	return dato;
+}
+
+function reenviarMsg(msg)
+{
+	if(!msg.sala)
+	{
+		var p=hashPeers.get(msg.dstUser);
+		console.log("++++++++++++++++++ MENSAJE ENVIADO a:"+p.websocket.usuario);
+		console.log(msg);
+		console.log("--------------- Fin --------------");
+		p.websocket.emit('message',toJSON(msg));
+	}else
+	{
+		var s=hashSalas.get(msg.sala);
+		if(!s)
+			return "No existe la sala";
+		var hpeers=s.hashPeers;
+		var usercon=hpeers.get(msg.dstUser);
+		if(!usercon)
+			return "Usuario desconectado";
+		if(!usercon.connected)
+			return "Usuario desconectado";
+		
+		console.log("++++++++++++++++++ MENSAJE ENVIADO a:"+msg.dstUser+" sala: "+msg.sala);
+		console.log(msg);
+		console.log("--------------- Fin --------------");
+			
+		usercon.emit('message',toJSON(msg));
+	
+	}
+	
+}
+
+
+function checkState(msg)
+{	
+	if(!msg.sala)
+	{
+		var dstUser=msg.dstUser;
+		var peerDst=hashPeers.get(dstUser);
+		if(peerDst)
+		if(peerDst.websocket.connected)
+			return "Online";
+	
+		return "Usuario desconectado";
+	}else
+	{
+		
+		var s=hashSalas.get(msg.sala);
+		if(!s)
+			return "No existe la sala";
+		var hpeers=s.hashPeers;
+		var usercon=hpeers.get(msg.dstUser);
+		if(!usercon)
+			return "Usuario desconectado";
+		if(!usercon.connected)
+			return "Usuario desconectado";
+			
+		return "Online";
+	}
+	
+}
+
+
+
+
+
+
+
+
+
+
+httpServer.listen(3000, function(){
+  console.log('listening on *:3000');
+});
+
+
+
+
+

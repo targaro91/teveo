@@ -1,0 +1,72 @@
+HISTORIAL DE MEJORAS / CAMBIOS
+@author: Jesús A. Castro R. 
+@Fecha Creación: 26-10-2013
+
+--------------------
+TERMINOLOGÍA
+--------------------
+Vacío: refiere a variables = '', undefined o null.
+R-D: 1er WebSocket en la señalización (Remitente - Destino).
+D-R: 2ndo WebSocket en la señalización (Destino - Remitente).
+
+---------------------
+GENERAL
+---------------------
+03-10-2013: Constraint de métodos createOffer y createAnswer pasan a null. En consecuencia, la
+señalización R-D/D-R funcionó.
+22-10-2013: Se agregó soporte para Firefox 24.
+23-10-2013: Se prueba en Huawei Ascend G510. Con Chrome Beta 29 y Firefox 24 funciona, pero sólo
+se pudo integrar en una App Android con Firefox. Se destaca que en esa versión de Chrome, el
+video sale sin color (grisáceo).
+24-10-2013: 
+** Se valida que no se llame a sí mismo.
+** Se inicializa la propiedad userRemitente y userDestino de la variable msgEnviar en la 
+función call y case BYE de openChannel.
+** No se envía mensaje UPDATE_CONNECTION en createOfferRemote. En consecuencia, si usuario1
+finaliza la llamada a usuario2, usuario2 puede llamar a usuario1. SIN EMBARGO, SE NOTA AVECES
+UNA CIERTA LENTITUD EN LA SEÑALIZACIÓN (PRUEBA REALIZADA EN PC).
+
+
+---------------------
+RED Y CONECTIVIDAD
+---------------------
+??-10-2013: Se valida excesivas retransmisiones ICE y señalizacion correcta Oferta-Respuesta.
+
+
+---------------------
+INTERFAZ WEB
+---------------------
+??-10-2013: Agregado panel de video y controles; además de LOGIN al iniciar la página.
+??-10-2013: Agregado panel de usuarios conectados (NO POR CUARTOS O ROOMs).
+??-10-2013: Interfaz web prototipo del chat para Escritorio finalizada.
+24-10-2013:
+** Corregido la aparición del usuario "undefined".
+** Corregido el problema de selección del usuario destino durante la llamada y después
+de la llamada. 
+
+---------------------
+SERVER NODE.JS
+---------------------
+??-10-2013: Código prototipo del servidor de señalización terminado.
+22-10-2013: Se creó un proyecto node Express & Jade. Con ésto, se tiene la posibilidad de
+crear un servidor web, generando este mismo la página html del chat a los visitantes. La razón es
+por la limitaciones de seguridad y bloqueos del protocolo file:///.
+24-10-2013: 
+** Se valida si existe cadenas de usuarios vacíos, antes de enviar la cadena
+de envío de status de usuarios a los nodos (UPDATE_CONNECTION). 
+** Se valida si existe conexiones nulas por socket en cada case.
+27-10-2013:
+** Modificado el case "END_SESSION" y mejorado el código de finalización de sesión.
+** Empleando la función close() de http.createServer, se cierran los sockets abiertos durante las
+llamadas, nuevas conexiones y al abrir sesión.
+
+
+
+
+-----------------------------
+PROPUESTAS A TENER EN CUENTA
+-----------------------------
+1. Cuando haya cambio de status, considerar hacerlo unicast. Actualmente, si el status de un usuario cambia,
+se actualiza el status de todos los usuarios independientemente si le corresponde o no.
+2. Para los mensajes BYE, considerar el uso de ACK. Así, el remitente sabe que el destino ha recibido
+su mensaje. Si no hay respuesta, retransmitir mensaje.

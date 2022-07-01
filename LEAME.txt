@@ -1,0 +1,42 @@
+
+@Author: Jesus A. Castro R.
+@Date: 19-10-2013
+
+-------------------
+Requisitos Tecnicos
+-------------------
+
+Navegador: Google Chrome v30 y superiores  para Escritorio. V29 y superiores para Android.
+
+-------------
+FAQ
+-------------
+
+PROBLEMA # 1: EL NAVEGADOR ACCEDE A LA WEBCAM, PERO NO GRABA SONIDO
+
+Puede darse el caso que CHROME solo permite difundir video y no audio, por motivos de privacidad.
+
+Para solucionarlo, hacer los pasos:
+
+1. Dirigirse al menu Configuracion.
+2. Clic en configuracion de contenidos.
+3. Ir a la seccion Multimedia y hacer clic en el boton administrar Excepciones.
+4. Borrar todas las excepciones que considere.
+
+PROBLEMA # 2: EL NAVEGADOR BLOQUEA LA WEBCAM SI SE EJECUTA CON EL PROTOCOLO FILE:///
+
+Chrome, a diferencia de otros navegadores, bloquea el uso de medios multimedia al ejecutar archivos html sin el empleo de
+un servidor web.
+
+Para solucionarlo, hacer los pasos:
+
+1. Crear un acceso directo de Google Chrome.
+2. En el tabulador "Acceso Directo", escribir, en la casilla Destino, la ruta del navegador mediante la siguiente estructura
+[ruta_navegador + --allow-file-access-from-files + ruta_archivo_html]. Note que tambien esta estructura puede utilizarla en
+linea de comandos. Por ejemplo:
+
+Windows:
+"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe" --allow-file-access-from-files C:\DESARROLLO\PROYECTOS\WEB\ModuloWebRTCUniversal\chat.html
+
+Mac (recomendado ejecutar como superusuario): 
+sudo /Applications/Google\ Chrome.app/Contents/MacOS/Google\ Chrome --allow-file-access-from-files /Users/usuario/Desktop/web\ pruebas/WEB/ModuloWebRTCUniversal/chat.html 

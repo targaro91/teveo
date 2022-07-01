@@ -1,0 +1,894 @@
+
+'use strict';
+
+//var socket = io.connect('https://alical.alimaticgr.alinet.cu:443');
+var socket;
+
+// Online,SendOffer,SendAnswer,Ocupado
+var estado="Online";
+//Nombre de la sala
+var sala=null;
+//Usuario propietario de la sala
+var propietario=null;
+var usuarioActual=null;
+//RTCPeerConnection si es null es que es un propietario 
+var pc=null;
+var hashParticipantes=null;
+
+
+var joinButton = document.getElementById('joinButton');
+//var hangupButton = document.getElementById('hangupButton');
+var createRomButton = document.getElementById('createRomButton');
+
+joinButton.disabled = false;
+//hangupButton.disabled = true;
+joinButton.onclick = autentificar;
+createRomButton.onclick = requestCreateRoom;
+
+var startTime;
+var localVideo = null;
+var broadcastStream=null;
+//var remoteVideo = document.getElementById('remoteVideo');
+var remoteVideo = null;
+var localStream=null;
+
+//var widthRemoteVideo=160;
+//setSizeRemoteVideo();
+
+//var ws = new WebSocket("ws://192.168.92.146:8080");
+var ws=null;
+var iceConf={ iceServers: [{urls:"turn:turn.alinet.cu:3478?transport=tcp",username: "alinet",
+credential: "123"}]
+};
+
+
+window.onload=inicializar;
+
+function inicializar()
+{
+	socket = io();
+
+	socket.on('message', function(data) {
+		console.log("Mensage recivido");
+		console.log(data);
+		procesarMsg(toObject(data));
+	});
+
+	trace("AliCall Desarrollador: Antonio David Perera Calas");
+	window.RTCPeerConnection= window.RTCPeerConnection || window.webkitRTCPeerConnection || window.mozRTCPeerConnection;
+
+	try {
+		var navegador=getBrowserInfo();
+		var arr=navegador.split(" ");
+		if(arr[0].toLocaleLowerCase()!="chrome")
+		{
+			alert("ADVERTENCIA: Usted esta usando: "+navegador+". Lo sentimos, por el momento para poder disfrutar \nde DIFUSION DE PARTICIPANTE debe de usar el navegador Chrome.");
+
+		}
+		
+	} catch (error) {
+		trace("Error al buscar navegador "+error);		
+	}
+	
+
+}
+
+var Participante= function(n)
+{
+	this.nombre=n;
+	this.video=null;
+	this.button=null;
+	this.div=null;
+	this.stream=null;
+	this.pc;
+	this.broadcast=false;
+	this.limpiar=function()
+	{
+		this.div.parentNode.removeChild(this.div);
+	};
+};
+
+
+
+
+function requestCreateRoom()
+{
+	propietario=document.getElementById('inputUsuario').value.toLowerCase();
+	sala=document.getElementById('inputSala').value.toLowerCase();
+	var msg=new SignalMsg(propietario,null,"CreateRom",null,sala);
+	enviarMsg(msg);
+}
+
+function crearSala(stream=null)
+{
+	trace("Creando sala");
+	estado="Online";
+	hashParticipantes=new Map();
+	eliminarDivAccion();
+	inicializarVideo();
+	if(stream)
+		gotStream(stream);
+	
+	trace("Sala creada");	
+	
+}
+
+function eliminarDivAccion()
+{
+	var cont = document.getElementById("container");
+	var elem = document.getElementById("accion");
+	cont.removeChild(elem);
+}
+
+
+function enableBroadcast()
+{
+	var divcontainer=document.getElementById("container");
+	var item = document.createElement('button');
+	item.id="broadcastIcon";
+	item.innerText="B";
+	item.className="broadcastIcon";
+	divcontainer.append(item);
+
+}
+
+function disableBroadcast()
+{
+	var item=document.getElementById("broadcastIcon");
+	item.parentNode.removeChild(item);		
+}
+
+function inicializarVideo(participante=false)
+{	
+	trace("Icicializando video");
+	var divcontainer=document.getElementById("container");
+	
+	if(!participante)
+	{
+		var item = document.createElement('video');
+		item.id="localVideo";
+		item.autoplay=true;
+		item.muted=true;
+		item.className="videoLocalPropietario";
+		divcontainer.append(item);
+		localVideo=item;
+
+		//Boton Intervenir
+		var itemB = document.createElement('button');
+		itemB.id="broadcastIcon";
+		itemB.onclick=recuperarFuente;
+		itemB.innerText="B";
+		itemB.className="broadcastIcon";
+		divcontainer.append(itemB);
+		itemB.disabled=true;
+		
+		localVideoEvent();
+	}else
+	{
+		
+
+		var vremoteVideo = document.createElement('video');
+		vremoteVideo.id="remoteVideo";
+		vremoteVideo.className="remoteVideo";
+		vremoteVideo.autoplay=true;
+		//vremoteVideo.width=window.innerWidth/2;
+		var vlocalVideo = document.createElement('video');
+		vlocalVideo.id="localVideo";
+		vlocalVideo.autoplay=true;
+		vlocalVideo.muted=true;
+		vlocalVideo.className="videoLocalPropietario"; //prueba
+		
+		
+		divcontainer.append(vlocalVideo);//prueba
+		divcontainer.append(vremoteVideo);
+		remoteVideo=vremoteVideo;
+		//dcremote.append(dclocal);
+		//dclocal.append(vlocalVideo);
+		localVideo=vlocalVideo;
+		
+		localVideoEvent();
+		remoteVideoEvent()
+	}
+	
+		
+}
+
+
+
+var SignalMsg= function (srcUser,dstUser,tipo,dato,rom)
+{	this.srcUser=srcUser;
+	this.dstUser=dstUser;	
+	this.tipo=tipo;// Invite,Offer,Answer,IceCandidate,HangUp,Error,AnswerInvite,Decline
+	this.dato=dato;
+	this.sala=rom;
+};
+
+
+
+
+function enviarMsg(msg)
+{
+	trace("Enviando mensaje:\n"+msg);
+	socket.emit('new-message', toJSON(msg));
+}
+function procesarMsg(signalMsg)
+{		
+	switch(signalMsg.tipo)
+	{
+		case "RestartIce": 
+			restartIceOffer();
+			break;
+		case "Invite": //solo lo recive el propietario
+			agregarParticipante(signalMsg);
+					
+			break;
+		case "Offer": //solo lo recive un participante
+			procesarOferta(signalMsg);
+			break;		
+		case "Answer"://solo lo recive el propietario
+			procesarRespuesta(signalMsg);
+			break;
+		case "EnableBroadcast"://solo lo recive un participante
+			enableBroadcast();
+			break;
+		case "DisableBroadcast"://solo lo recive un participante
+			disableBroadcast();
+			break;	
+		case "HangUp":
+			trace("Recivida solicitud de hangUp.");
+			hangUp(signalMsg.srcUser);
+			break;
+		case "Error":
+			alert("Error :"+signalMsg.dato);
+			setOnline();
+			break;
+		case "IceCandidate":
+			agregarIceCandidate(signalMsg.dato,signalMsg.srcUser); 
+			break;
+		case "Autenticate": //solo lo recive un participante
+			if(signalMsg.dato!="OK")
+				alert(signalMsg.dato);
+			else
+				iniciarLlamada(signalMsg);
+			
+			break;
+		case "CreateRom":
+			if(signalMsg.dato=="OK")
+				start(crearSala);
+			else
+				alert(signalMsg.dato);			
+			break;
+		default : {mensajeDesconocido(signalMsg);break;}
+		
+	}	
+	
+}
+
+//Cuando se resiva la respuesta de Autenticate
+function modoParticipante()
+{
+}
+
+function agregarParticipante(signalMsg)
+{
+	trace("Recivido Invite:\n"+signalMsg);
+
+	var par=new Participante(signalMsg.srcUser);
+	appendVideo(par);
+	hashParticipantes.set(signalMsg.srcUser,par);
+
+	
+	
+	
+	
+	
+	
+	//Creando RTCPeerConnection
+	par.pc=new RTCPeerConnection(iceConf);
+	
+	par.pc.onicecandidate = function(e) {onIceCandidate(e,par);};
+	par.pc.oniceconnectionstatechange = function(e) {onIceStateChange(e,signalMsg.srcUser);};
+	par.pc.onaddstream = function(e){gotRemoteStream(e,par);}; 
+//	par.pc.onnegotiationneeded=function(){renegociar(par);};
+	
+	if(localStream)
+	{
+		trace("Agregando stream a: "+signalMsg.srcUser);
+		par.pc.addStream(localStream);
+	}
+	
+	
+	//Crear oferta
+	crearOferta(par);
+}
+
+//function renegociar(participante) 
+//{
+//	crearOferta(participante);	
+//}
+
+function recuperarFuente()
+{
+	hashParticipantes.forEach(function(v,k,map)
+	{
+		if(v)
+			if(v.pc.getLocalStreams()[0]!=localStream)
+				{
+					v.pc.removeStream(v.pc.getLocalStreams()[0]);
+					v.pc.addStream(localStream);
+					
+					crearOferta(v);
+				}else if(v.broadcast)
+				{
+					var msg=new SignalMsg(propietario,v.nombre,"DisableBroadcast",null,sala);
+					enviarMsg(msg);
+				}
+		
+	});
+
+	var itemB=document.getElementById("broadcastIcon");
+	itemB.disabled=true;
+}
+
+function cambiarFuente(participante)
+{
+	if(!participante.stream)
+	{
+		trace("Participante no tiene stream");
+		return false;
+	}
+	trace("Cambiando fuente de video a: "+participante.nombre);
+	
+	
+	hashParticipantes.forEach(
+		function(v,k,map)
+		{
+			if(v)
+			if(k!=participante.nombre)
+			{
+
+				if(v.broadcast)
+				{
+					v.broadcast=false;
+					var msg=new SignalMsg(propietario,v.nombre,"DisableBroadcast",null,sala);
+					enviarMsg(msg);
+				}
+
+				trace("Removiendo stream local participante: "+v.nombre);
+				v.pc.removeStream(v.pc.getLocalStreams()[0]);
+				trace("Agregando stream de: "+participante.nombre+" a participante: "+v.nombre);
+				v.pc.addStream(participante.stream);
+				v.button.disabled=false;
+
+				//renegociar
+				crearOferta(v);
+			}else
+			{
+				v.button.disabled=true;
+				trace("localStream:\n"+localStream);
+				trace(v.nombre+": localStream:\n"+localStream);
+				if(v.pc.getLocalStreams()[0]!=localStream)
+				{
+					v.pc.removeStream(v.pc.getLocalStreams()[0]);
+					v.pc.addStream(localStream);
+					
+					crearOferta(v);
+				}
+			}
+		}
+	);
+	
+	participante.broadcast=true;
+	var msg=new SignalMsg(propietario,participante.nombre,"EnableBroadcast",null,sala);
+	enviarMsg(msg);
+
+	var itemB=document.getElementById("broadcastIcon");
+	itemB.disabled=false;
+}
+
+function appendVideo(participante)
+{
+	var divcontainer=document.getElementById("container");
+
+	var divParticipante=document.createElement('div');
+	divParticipante.className="div-participante";
+	var itemButton = document.createElement('button');
+	itemButton.onclick=function(){cambiarFuente(participante)};
+	itemButton.innerText="Difundir";
+	itemButton.className="difundir";
+
+	var item = document.createElement('video');
+	//item.id="1";
+	item.className="videoRemoto";
+	//item.width=widthRemoteVideo;
+	item.autoplay=true;
+	item.className="vRemotoParticipante";
+
+	var itemP = document.createElement('p');
+	itemP.className="uname";
+	itemP.innerText=participante.nombre;
+
+	divcontainer.append(divParticipante);
+	divParticipante.append(itemButton);
+	divParticipante.append(item);
+	divParticipante.append(itemP);
+	
+	participante.video=item;
+	participante.button=itemButton;
+	participante.div=divParticipante;
+}
+function autentificar()
+{
+	usuarioActual=document.getElementById('inputUsuario').value;
+	sala=document.getElementById('inputSala').value.toLowerCase();
+	
+	trace('Enviando autentifacion');
+	var login=new Object();
+	login.user=usuarioActual;
+	var msg=new SignalMsg(usuarioActual,null,"Autenticate",login,sala);
+	msg.tipo="Autenticate"
+	
+	enviarMsg(msg);
+	
+}
+
+function agregarIceCandidate(candidate,participante)
+{	
+	trace("Agregando IceCandidate: \n");
+	if(candidate)
+			trace('ICE candidate: \n' + candidate);
+		else
+			trace('ICE candidate: \n null');
+
+	if(pc)
+		pc.addIceCandidate(candidate).then(function() {onAddIceCandidateSuccess();},function(err) {onAddIceCandidateError(err);});
+	else
+	{
+		var pcPart=hashParticipantes.get(participante).pc;
+		pcPart.addIceCandidate(candidate).then(function() {onAddIceCandidateSuccess();},function(err) {onAddIceCandidateError(err);});
+		
+	}
+	
+		
+}
+
+function procesarRespuesta(signalMsg)
+{
+	var part=hashParticipantes.get(signalMsg.srcUser);
+	var pcPart=part.pc;
+	trace('setRemoteDescription start sdp:\n'+signalMsg.dato.sdp);
+	pcPart.setRemoteDescription(signalMsg.dato).then(function() {
+	onSetRemoteSuccess(pcPart);
+	}, onSetSessionDescriptionError );
+}
+
+
+function onconnectionstatechange(event) {
+  switch(pc.connectionState) {
+    case "disconnected":
+    case "failed":
+	case "closed":
+      Trace("RTCPeerConnectionState: "+ pc.connectionState);
+	  setOnline();
+      break;
+  }
+}
+
+function procesarOferta(signalMsg)
+{
+	//var part=hashParticipantes.get(signalMsg.srcUser);
+	
+	trace("Oferta recivida de propietario: "+signalMsg.srcUser);
+	var desc=signalMsg.dato;
+	
+	trace('setRemoteDescription start sdp:\n'+desc.sdp);
+	pc.setRemoteDescription(desc).then(
+    function() {
+      onSetRemoteSuccess(pc);
+    },
+    onSetSessionDescriptionError
+	);
+	
+	pc.createAnswer().then(
+	onCreateAnswerSuccess,
+    onCreateSessionDescriptionError
+  );
+  
+	
+}
+
+function crearOferta(par)
+{
+	trace('Creando Oferta');
+  par.pc.createOffer(
+    offerOptions
+  ).then(function(desc){onCreateOfferSuccess(desc,par);},
+    onCreateSessionDescriptionError
+  );	
+}
+
+
+
+function toJSON(object)
+{
+ return JSON.stringify(object);
+}
+
+function toObject(json)
+{
+ return JSON.parse(json);
+}
+
+function localVideoEvent()
+{
+	localVideo.addEventListener('loadedmetadata', function() {
+  trace('Local video videoWidth: ' + this.videoWidth +
+    'px,  videoHeight: ' + this.videoHeight + 'px');});
+	
+	localVideo.onresize = function() {
+  trace('Video local resolucion cambiada a:' +
+    localVideo.videoWidth + 'x' + localVideo.videoHeight);
+  // We'll use the first onsize callback as an indication that video has started
+  // playing out.
+  if (startTime) {
+    var elapsedTime = window.performance.now() - startTime;
+    trace('Setup time: ' + elapsedTime.toFixed(3) + 'ms');
+    startTime = null;
+  }
+};
+
+	
+}
+
+function remoteVideoEvent()
+{
+	remoteVideo.addEventListener('loadedmetadata', function() {
+  trace('Remote video videoWidth: ' + this.videoWidth +
+    'px,  videoHeight: ' + this.videoHeight + 'px');});
+	
+	remoteVideo.onresize = function() {
+  trace('Video Remoto  resolucion cambiada a:' +
+    remoteVideo.videoWidth + 'x' + remoteVideo.videoHeight);
+  // We'll use the first onsize callback as an indication that video has started
+  // playing out.
+  if (startTime) {
+    var elapsedTime = window.performance.now() - startTime;
+    trace('Setup time: ' + elapsedTime.toFixed(3) + 'ms');
+    startTime = null;
+  }
+};
+
+
+}
+
+
+
+
+
+
+
+
+var offerOptions = {
+  offerToReceiveAudio: 1,
+  offerToReceiveVideo: 1
+};
+
+
+function gotStream(stream) {
+  trace('Reciviendo local stream');
+  localVideo.srcObject = stream;
+	localStream = stream;
+	broadcastStream= stream;
+}
+
+function start(varfunction) {
+  trace('Solicitud local stream');
+  
+  var constraints = {
+  audio: true,
+  video: {
+    width: { min: 144, ideal: 144, max: 320 },
+    height: { min: 144, ideal: 144, max: 240 }
+  }
+};
+
+  
+  navigator.mediaDevices.getUserMedia(constraints)
+    .then(varfunction)
+    .catch(function(e) {
+      trace('getUserMedia() error: ' + e.name);
+	  varfunction();
+    });
+}
+
+function iniciarLlamada(signalMsg)
+{
+	trace("Iniciando llamada");
+	sala=signalMsg.sala;
+	propietario=signalMsg.dstUser;
+	eliminarDivAccion();
+	inicializarVideo(true);
+	start(requestCall);		
+}
+function requestCall(stream)
+{
+	if(usuarioActual&&propietario)
+	{
+		gotStream(stream);
+		
+		preparar();
+		
+		trace('Enviando Solicitud de llamada al propietario');
+		var msg=new SignalMsg(usuarioActual,propietario,"Invite",null,sala);
+		enviarMsg(msg);	
+	}
+	
+	
+		
+}
+
+function preparar() {
+  
+  trace("Inicializando Local Peer Connection");
+  
+  startTime = window.performance.now();
+  
+  pc = new RTCPeerConnection(iceConf);
+  
+  pc.onicecandidate = function(e) {
+    onIceCandidate(e);
+  };
+  //pc.onconnectionstatechange=onconnectionstatechange;
+  pc.oniceconnectionstatechange = function(e) {
+    onIceStateChange(e);
+  };
+  pc.onnegotiationneeded=function(e) {
+    trace("+++++++++++ Solicitud de negociasion sdp ++++++++++++++++++");
+  };
+
+  if(localStream)
+  {
+	 var videoTracks = localStream.getVideoTracks();
+	var audioTracks = localStream.getAudioTracks();
+	if (videoTracks.length > 0) {
+		trace('Using video device: ' + videoTracks[0].label);
+	}
+	if (audioTracks.length > 0) {
+		trace('Using audio device: ' + audioTracks[0].label);
+	}
+	
+	pc.addStream(localStream);
+	trace('Agregando local stream a PeerConnection');
+	  
+  }
+  
+  
+  pc.onaddstream = gotRemoteStream;
+   
+}
+
+function onCreateSessionDescriptionError(error) {
+  trace('Fallo al crear session description: ' + error.toString());
+}
+
+function onCreateOfferSuccess(desc,par) {
+  trace('setLocalDescription start\n' + desc.sdp);
+  par.pc.setLocalDescription(desc).then(
+    function() {
+      onSetLocalSuccess(par.pc);
+    },
+    onSetSessionDescriptionError
+  );
+  trace('Enviando Oferta');
+  var msg=new SignalMsg(propietario,par.nombre,"Offer",desc,sala);
+  enviarMsg(msg);
+  
+}
+
+function onSetLocalSuccess(pc) {
+  trace('setLocalDescription complete');
+}
+
+function onSetRemoteSuccess(pc) {
+  trace('setRemoteDescription complete');
+}
+
+function onSetSessionDescriptionError(error) {
+  trace('Failed to set session description: ' + error.toString());
+}
+
+function gotRemoteStream(e,participante=null) {
+	if(!participante)
+	{
+		remoteVideo.srcObject = e.stream;
+		trace('Recivido stream remoto');
+	}else
+	{
+		participante.stream=e.stream;
+		participante.video.srcObject=e.stream;
+		trace('Recivido stream remoto de '+participante.nombre);
+	}
+  
+}
+
+function onCreateAnswerSuccess(desc) {
+  trace('Creando respuesta');
+  trace('setLocalDescription sdp:\n' + desc.sdp);
+  pc.setLocalDescription(desc).then(
+    function() {
+      onSetLocalSuccess(pc);
+    },
+    onSetSessionDescriptionError
+  );
+  trace('Enviando respuesta sdp a propietario: '+propietario);
+  var msg=new SignalMsg(usuarioActual,propietario,"Answer",desc,sala);
+  enviarMsg(msg);
+  
+  //Cambiando estado
+  estado="SendAnswer";
+}
+
+function onIceCandidate(event,participante=null) {
+	trace("Enviando IceCandidate:"+event);
+	if (event.candidate)
+	{
+			trace(event.candidate);
+	}
+	var msg=null;
+	if(!participante)	
+		msg=new SignalMsg(usuarioActual,propietario,"IceCandidate",event.candidate,sala);
+	else
+		msg=new SignalMsg(propietario,participante.nombre,"IceCandidate",event.candidate,sala);
+	
+	enviarMsg(msg);	
+}
+
+function onAddIceCandidateSuccess() {
+  trace('addIceCandidate success');
+}
+
+function onAddIceCandidateError(error) {
+  trace('failed to add ICE Candidate: ' + error.toString());
+}
+
+function onIceStateChange(event,participante=null) {
+	if(!participante)
+	{
+		trace('-------------------------  PeerIceState: ' + pc.iceConnectionState);
+		switch(pc.iceConnectionState) 
+		{
+			case "closed":
+			case "failed":
+				enviarHangUp();
+				break;
+		}
+		
+	}else
+	{
+		var part=hashParticipantes.get(participante);
+		if(part)
+		{
+			var pcPart=part.pc;
+			trace('--------Participante: '+participante+' PeerIceState: ' + pcPart.iceConnectionState);
+			
+			switch(pcPart.iceConnectionState) 
+			{
+			case "closed":
+			case "failed":
+				hangUp(participante);
+				break;
+			}
+		}
+		
+		
+		
+	}
+    
+}
+
+function sendRestartIceOffer()
+{
+	trace('Enviando solicitud IceRestart');
+	var msg=new SignalMsg(usuarioActual,usuarioDestino,"RestartIce",null);
+    enviarMsg(msg);
+}
+
+function restartIceOffer()
+{
+  trace('Creando IceRestart Oferta');
+  pc.createOffer({offerToReceiveAudio: 1,offerToReceiveVideo: 1,iceRestart: true}).then(
+    onCreateOfferSuccess,
+    onCreateSessionDescriptionError
+  );
+		
+}
+
+
+
+
+function hangUp(participante) {
+	//si es un participante recargar la pagina
+	if(pc)
+	{
+		
+		try
+		{
+			pc.close();
+		}
+		catch(exp)
+		{
+			trace(exp);
+		}
+		location.reload();
+	}
+	else
+	{
+		var part=hashParticipantes.get(participante);
+		try
+		{
+			trace("Eliminando video participante: "+participante);
+			part.limpiar();
+			part.pc.close();
+			hashParticipantes.delete(participante);
+		}
+		catch(exp)
+		{
+			trace(exp);
+		}
+		
+		
+		
+	}
+}
+
+function enviarHangUp()
+{
+	if(pc)
+	{
+		try
+		{
+			pc.close();
+		}
+		catch(exp)
+		{
+			trace(exp);
+		}
+		location.reload();
+				
+	}else
+	{
+		
+		
+	}	
+}
+
+
+function mensajeDesconocido(msg)
+{
+	trace("---------------------- No se pudo procesar mensaje.----------------------:\n");
+	trace(msg);
+	
+}
+
+// logging utility
+function trace(arg) {
+  var now = (window.performance.now() / 1000).toFixed(3);
+  console.log(now + ': ', arg);
+}
+
+
+function getBrowserInfo() {
+    var ua= navigator.userAgent, tem, 
+    M= ua.match(/(opera|chrome|safari|firefox|msie|trident(?=\/))\/?\s*(\d+)/i) || [];
+    if(/trident/i.test(M[1])){
+        tem=  /\brv[ :]+(\d+)/g.exec(ua) || [];
+        return 'IE '+(tem[1] || '');
+    }
+    if(M[1]=== 'Chrome'){
+        tem= ua.match(/\b(OPR|Edge)\/(\d+)/);
+        if(tem!= null) return tem.slice(1).join(' ').replace('OPR', 'Opera');
+    }
+    M= M[2]? [M[1], M[2]]: [navigator.appName, navigator.appVersion, '-?'];
+    //if((tem= ua.match(/version\/(\d+)/i))!= null) M.splice(1, 1, tem[1]);
+    return M.join(' ');
+};

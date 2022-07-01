@@ -1,0 +1,362 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    font-family: sans-serif;
+    font-weight: 300;
+    margin: 0;
+    word-break: break-word;
+    height: 100%;
+}
+
+#menu {
+    display: inline-block;
+    position: absolute;
+    right: 110px;
+    top: -8px;
+    background-color: white;
+    padding: 8px;
+    border-radius: 5px;
+    height: 37px;
+}
+
+#menu li {
+    display: inline;
+    margin: 3px;
+}
+
+a {
+    text-decoration: none;
+    color: #de0d08;
+    font-size: 14px;
+    line-height: 24px;
+    font-family: LatoWeb, source_sans_proregular, Arial;
+    height: 24px;
+    min-width: 30px;
+    border-radius: 3px;
+    padding: 0px 9px;
+}
+
+a:hover {
+    cursor: pointer;
+}
+
+.form-signin {
+    max-width: 230px;
+    padding: 15px;
+    margin: 0px auto;
+    margin-top: 60px;
+}
+
+.form-control {
+    display: block;
+    width: 100%;
+    padding: 6px 12px;
+    font-size: 14px;
+    line-height: 1.42857143;
+    color: #555;
+    background-color: #fff;
+    background-image: none;
+    border: 1px solid #ccc;
+    margin-top: 4px;
+    border-radius: 4px;
+    box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.075);
+    transition: border-color ease-in-out .15s, box-shadow ease-in-out .15s;
+}
+
+.fc-final {
+    margin-bottom: 8px;
+}
+
+div.div-participante {
+    display: inline-table;
+    padding: 0px;
+    margin: 3px 10px;
+	width: 15%;  /*cambio ramon imagen pequeña*/
+	position: relative;
+}
+
+button.difundir {
+    margin: 0px 3px 3px 0;
+}
+
+button.difundir[disabled] {
+    background-color: #099612;
+}
+
+button.difundir[disabled]:hover {
+    background-color: #099612;
+}
+
+button.verde {
+    background-color: #158e1d;
+}
+
+button.verde:active {
+    background-color: #14881c;
+}
+
+button.verde:hover {
+    background-color: #14881c;
+}
+
+button.menu {
+    padding: 2px 5px 2px 5px;
+}
+
+button.blanco {
+    background-color: white;
+}
+
+button.rojo {
+    background-color: #ff8e00;
+}
+
+button.rojo:active {
+    background-color: #fe9d24;
+}
+
+button.rojo:hover {
+    background-color: #fe9d24;
+}
+
+button.azul {
+    background-color: #277fda;
+}
+
+button.full {
+    width: 100%;
+}
+
+button.azul:active {
+    background-color: #1e77d4;
+}
+
+button.azul:hover {
+    background-color: #1e77d4;
+}
+
+button {
+    background-color: #252322;
+    border: none;
+    border-radius: 2px;
+    color: white;
+    font-family: sans-serif;
+    font-size: 0.8em;
+    margin: 0 0 1em 0;
+    padding: 0.6em;
+    border-radius: 4px;
+}
+
+button.invisible[disabled] {
+    color: transparent;
+    background-color: transparent;
+    border-color: transparent;
+    cursor: default;
+}
+
+button.invisible[disabled]:hover {
+    color: transparent;
+    background-color: transparent;
+    border-color: transparent;
+    cursor: default;
+}
+
+button.invisible[disabled]:active {
+    color: transparent;
+    background-color: transparent;
+    border-color: transparent;
+    cursor: default;
+}
+
+code {
+    font-family: sans-serif;
+    font-weight: 400;
+}
+
+html {
+    background-color: #636363;
+}
+
+.vRemotoParticipante {
+    margin: 0px;
+    vertical-align: top;
+    width: 100%;
+}
+
+div#divRemoteVideo {
+    vertical-align: top;
+    margin: auto;
+    position: relative;
+    display: block;
+    margin-top: 40px;
+    width: 40%;
+}
+
+video.remoteVideo {
+    margin: 0px;
+    vertical-align: top;
+    width: 100%;
+}
+
+video#localVideo {
+    width: 70px;
+    background: #101010;
+}
+
+video.videoLocalPropietario {
+    z-index: 100;
+    position: absolute;
+    top: 0px;
+    right: 0px;
+}
+
+p.uname {
+    color: #FFFF00;
+    z-index: 100;
+    margin: 0px;
+    position: absolute;
+    bottom: 2px;
+    left: 4px;
+    font-weight: 600;
+}
+
+.broadcastIcon {
+    z-index: 110;
+    position: absolute;
+    top: 6px;
+    right: 6px;
+}
+
+video {
+    background: #101010;
+    border-radius: 0.5em 0.5em;
+}
+
+p.titulo {
+    display: inline-block;
+}
+
+p.beta {
+    font-size: 12px;
+}
+
+div#highlight {
+    color: white;
+    background-color: #981914;
+    font-size: 1.2em;
+    font-style: italic;
+    padding: 0.5em 2em;
+    line-height: 0;
+    border-bottom: solid;
+    border-bottom-style: solid;
+    margin-bottom: 10px;
+}
+
+input {
+    font-family: sans-serif;
+}
+
+video {
+    background: #222;
+    border-radius: 0.5em 0.5em;
+}
+
+@media (max-width: 700px) {
+    video.remoteVideo {
+        margin-top: 0px;
+        width: 100%;
+    }
+    #menu {
+        right: 10px;
+    }
+    .vRemotoParticipante {
+        margin: 0px;
+        vertical-align: top;
+        width: 100%;
+    }
+    div.div-participante {
+        display: inline-table;
+        padding: 0px;
+        margin: 2px;
+        width: 48%
+    }
+    video.videoLocalPropietario {
+        z-index: 100;
+        position: absolute;
+        right: 1px;
+        bottom: 4px;
+        top: auto;
+    }
+}
+
+.partButtonMute {
+	z-index: 101;
+    margin: 0px;
+    position: absolute;
+    top: 4px;
+    float: right;
+    right: 6px;
+    color: #808080;
+    cursor: pointer;
+}
+
+.partButtonMuteEnable {
+	color: #80020e
+
+}
+
+.partButtonDisableVideo {
+	z-index: 101;
+    margin: 0px;
+    position: absolute;
+    top: 4px;
+    float: right;
+    right: 30px;
+    color: #808080;
+    cursor: pointer;
+}
+
+.partButtonDisableVideoEnable {
+	color: #80020e
+
+}
+
+.partButtonDifundir {
+	z-index: 101;
+    margin: 0px;
+    position: absolute;
+    top: 4px;
+    float: left;
+    left: 5px;
+    cursor: pointer;
+    color: #808080;
+}
+
+.partButtonDifundirEnable {
+	color: #008000;
+}
+
+
+footer {
+    position: fixed;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+    /* background-color: #981914; */
+    color: #ffffff;
+    text-align: center;
+    font-size: 12px;
+    padding: 5px 0px;
+}
+
+.toggleMute {
+	color: #048c04;
+    cursor: pointer
+}
+
+.toggleMuteEnable {
+	color: #80020e
+
+}
