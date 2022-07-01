@@ -1,6 +1,5 @@
 
-@Author: Jesus A. Castro R.
-@Date: 19-10-2013
+@Author: Antonio david Perera Calas
 
 -------------------
 Requisitos Tecnicos
